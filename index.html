@@ -368,12 +368,13 @@
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const exportScale = 3; 
+            const exportScale = 3; // High-definition multiplier
             const boardRect = board.getBoundingClientRect();
             
             canvas.width = boardRect.width * exportScale;
             canvas.height = boardRect.height * exportScale;
 
+            // Background color for your saved snapshot
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -383,12 +384,31 @@
                 const ly = parseFloat(piece.style.top);
 
                 if (imgElement && imgElement.complete) {
+                    // 1. Get the original native dimensions of the SVG file
+                    const nativeWidth = imgElement.naturalWidth || TILE_SIZE;
+                    const nativeHeight = imgElement.naturalHeight || TILE_SIZE;
+                    
+                    // 2. Calculate target bounding box values adjusted for HD scale
+                    const targetBoxSize = TILE_SIZE * exportScale;
+                    const targetX = lx * exportScale;
+                    const targetY = ly * exportScale;
+                    
+                    // 3. Dynamically compute the aspect ratio scaling factor (object-fit: contain logic)
+                    const scale = Math.min(targetBoxSize / nativeWidth, targetBoxSize / nativeHeight);
+                    
+                    // 4. Calculate centered offsets inside the grid slot allocation
+                    const renderWidth = nativeWidth * scale;
+                    const renderHeight = nativeHeight * scale;
+                    const offsetX = (targetBoxSize - renderWidth) / 2;
+                    const offsetY = (targetBoxSize - renderHeight) / 2;
+
+                    // 5. Draw onto the canvas preserving original proportions perfectly
                     ctx.drawImage(
                         imgElement, 
-                        lx * exportScale, 
-                        ly * exportScale, 
-                        TILE_SIZE * exportScale, 
-                        TILE_SIZE * exportScale
+                        targetX + offsetX, 
+                        targetY + offsetY, 
+                        renderWidth, 
+                        renderHeight
                     );
                 }
             });
@@ -396,7 +416,7 @@
             try {
                 const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 const clientAnchorLink = document.createElement('a');
-                clientAnchorLink.download = 'My-Guess.jpg';
+                clientAnchorLink.download = 'my-mosaic.jpg';
                 clientAnchorLink.href = jpegDataUrl;
                 document.body.appendChild(clientAnchorLink);
                 clientAnchorLink.click();
