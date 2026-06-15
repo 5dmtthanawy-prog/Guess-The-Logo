@@ -368,35 +368,100 @@
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const exportScale = 3; 
+            
             const boardRect = board.getBoundingClientRect();
+            const exportScale = 3; // Keeps the exported image crisp and high-res
             
             canvas.width = boardRect.width * exportScale;
             canvas.height = boardRect.height * exportScale;
 
+            // Canvas background
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            let loadedCount = 0;
+
             placedPieces.forEach(piece => {
                 const imgElement = piece.querySelector('img');
-                const lx = parseFloat(piece.style.left);
-                const ly = parseFloat(piece.style.top);
-
-                if (imgElement && imgElement.complete) {
-                    ctx.drawImage(
-                        imgElement, 
-                        lx * exportScale, 
-                        ly * exportScale, 
-                        TILE_SIZE * exportScale, 
-                        TILE_SIZE * exportScale
-                    );
+                if (!imgElement) {
+                    loadedCount++;
+                    return;
                 }
-            });
 
+                const pieceRect = piece.getBoundingClientRect();
+                const relativeX = pieceRect.left - boardRect.left;
+                const relativeY = pieceRect.top - boardRect.top;
+
+                // Fetch the raw SVG markup directly via an AJAX request to read its true aspect ratio
+                fetch(imgElement.src)
+                    .then(response => response.text())
+                    .then(svgText => {
+                        const parser = new DOMParser();
+                        const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+                        const svgElement = svgDoc.querySelector('svg');
+
+                        if (svgElement) {
+                            // Force the SVG to preserve its original aspect ratio inside our canvas layout box
+                            svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                            
+                            // If the SVG lacks a viewBox, dynamically generate one using its native structural attributes
+                            if (!svgElement.getAttribute('viewBox')) {
+                                const w = svgElement.getAttribute('width') || TILE_SIZE;
+                                const h = svgElement.getAttribute('height') || TILE_SIZE;
+                                svgElement.setAttribute('viewBox', `0 0 ${parseFloat(w)} ${parseFloat(h)}`);
+                            }
+                            
+                            // Match its output dimensions to our tile sizing rules
+                            svgElement.setAttribute('width', TILE_SIZE);
+                            svgElement.setAttribute('height', TILE_SIZE);
+
+                            // Serialize back to a safe base64 data URL string
+                            const updatedSvgString = new XMLSerializer().serializeToString(svgElement);
+                            const blob = new Blob([updatedSvgString], { type: 'image/svg+xml;charset=utf-8' });
+                            const blobUrl = URL.createObjectURL(blob);
+
+                            const renderImg = new Image();
+                            renderImg.src = blobUrl;
+
+                            renderImg.onload = function() {
+                                const targetX = relativeX * exportScale;
+                                const targetY = relativeY * exportScale;
+                                const targetWidth = pieceRect.width * exportScale;
+                                const targetHeight = pieceRect.height * exportScale;
+
+                                ctx.drawImage(renderImg, targetX, targetY, targetWidth, targetHeight);
+                                URL.revokeObjectURL(blobUrl);
+
+                                loadedCount++;
+                                if (loadedCount === placedPieces.length) {
+                                    triggerDownload(canvas);
+                                }
+                            };
+
+                            renderImg.onerror = function() {
+                                loadedCount++;
+                                if (loadedCount === placedPieces.length) triggerDownload(canvas);
+                            };
+                        } else {
+                            // Fallback if parsing fails
+                            loadedCount++;
+                            if (loadedCount === placedPieces.length) triggerDownload(canvas);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Error processing SVG vector sizing:", err);
+                        loadedCount++;
+                        if (loadedCount === placedPieces.length) triggerDownload(canvas);
+                    });
+            });
+        }
+
+        // Helper function to handle the safe image file download stream
+        function triggerDownload(canvas) {
             try {
                 const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 const clientAnchorLink = document.createElement('a');
-                clientAnchorLink.download = 'My-Guess.jpg';
+                clientAnchorLink.download = 'my-mosaic.jpg';
                 clientAnchorLink.href = jpegDataUrl;
                 document.body.appendChild(clientAnchorLink);
                 clientAnchorLink.click();
