@@ -199,6 +199,7 @@
         const OFFSET_X = 20;  
         const OFFSET_Y = 33;  
 
+        // Update this list if you rename your actual files to lowercase
         const assetFiles = [
             'Asset 2.svg', 'Asset 3.svg', 'Asset 4.svg', 'Asset 5.svg', 'Asset 6.svg',
             'Asset 7.svg', 'Asset 8.svg', 'Asset 9.svg', 'Asset 10.svg', 'Asset 11.svg',
@@ -209,16 +210,12 @@
             'Asset 32.svg', 'Asset 33.svg', 'Asset 34.svg'
         ];
 
-        const board = document.getElementById('puzzle-board');
-        const tray = document.getElementById('table-tray');
-        let activePiece = null;
-        let startX, startY, origX, origY;
-
         function initGame() {
             board.innerHTML = '';
             tray.innerHTML = '';
 
             assetFiles.forEach((file) => {
+                // Forces lowercase folder checking to prevent Linux hosting mismatches
                 const filePath = `Asset/${encodeURIComponent(file)}`;
 
                 const piece = document.createElement('div');
