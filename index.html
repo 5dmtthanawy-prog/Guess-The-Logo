@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <title>Guess The Logo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            background-color: #ffffff;
+            color: #111111;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            height: -webkit-fill-available;
+            width: 100vw;
+        }
+        
+        header {
+            padding: 10px 10px 5px 10px;
+            text-align: center;
+            width: 100%;
+            flex-shrink: 0;
+        }
+        
+        h1 {
+            font-size: 1.1rem;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #333333;
+        }
+        
+        /* The main container scales to fit any viewport screen seamlessly */
+        #game-workspace {
+            flex: 1;
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 12px;
+            min-height: 0;
+        }
+
+        /* Responsive structural board grid aspect ratio lock */
+        #puzzle-board {
+            width: 100%;
+            aspect-ratio: 1 / 1.15; /* Keeps perfect proportions across mobile and tablet screens */
+            max-height: 60vh; /* Safeguards against overflow layout clips on short devices */
+            background-color: #ffffff;
+            border-radius: 12px;
+            position: relative;
+            border: 1px dashed #cccccc;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        /* Fluid scrolling base item asset drawer layout */
+        #table-tray {
+            width: 100%;
+            height: 105px;
+            background-color: #ffffff;
+            border-top: 1px solid #eaeaea;
+            position: relative;
+            overflow-x: auto;
+            overflow-y: hidden;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            flex-shrink: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .puzzle-piece {
+            position: absolute;
+            cursor: grab;
+            touch-action: none;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #table-tray .puzzle-piece {
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            flex-shrink: 0;
+        }
+        
+        .puzzle-piece:active {
+            cursor: grabbing;
+            z-index: 100;
+        }
+        
+        .puzzle-piece img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+            object-fit: contain;
+        }
+
+        .puzzle-piece.snapped {
+            z-index: 5;
+        }
+
+        /* Secure bottom layout controls panel layout */
+        .controls {
+            display: flex;
+            gap: 12px;
+            padding: 12px 20px;
+            width: 100%;
+            max-width: 450px;
+            justify-content: center;
+            background-color: #ffffff;
+            flex-shrink: 0;
+            margin-bottom: max(8px, env(safe-area-inset-bottom));
+        }
+        
+        button {
+            background: #ffffff;
+            color: #333333;
+            border: 1px solid #cccccc;
+            padding: 14px 20px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            flex: 1;
+            transition: all 0.15s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        button:active {
+            background: #f5f5f5;
+            border-color: #999999;
+            transform: scale(0.98);
+        }
+        
+        #btn-capture {
+            background: #111111;
+            color: #ffffff;
+            border: 1px solid #111111;
+        }
+        
+        #btn-capture:active {
+            background: #222222;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Guess The Logo</h1>
+    </header>
+
+    <div id="game-workspace">
+        <div id="puzzle-board"></div>
+    </div>
+
+    <div id="table-tray"></div>
+
+    <div class="controls">
+        <button id="btn-reset" onclick="initGame()">Reset</button>
+        <button id="btn-capture" onclick="captureSolution()">Save Image</button>
+    </div>
+
+    <script>
+        function playSnapSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(580, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(); osc.stop(ctx.currentTime + 0.05);
+            } catch(e) {}
+        }
+
+        // GRID GEOMETRY CONFIGURATION
+        const TILE_SIZE = 51; 
+        const OFFSET_X = 20;  
+        const OFFSET_Y = 33;  
+
+        const assetFiles = [
+            'Asset 2.svg', 'Asset 3.svg', 'Asset 4.svg', 'Asset 5.svg', 'Asset 6.svg',
+            'Asset 7.svg', 'Asset 8.svg', 'Asset 9.svg', 'Asset 10.svg', 'Asset 11.svg',
+            'Asset 12.svg', 'Asset 13.svg', 'Asset 14.svg', 'Asset 15.svg', 'Asset 16.svg',
+            'Asset 17.svg', 'Asset 18.svg', 'Asset 19.svg', 'Asset 20.svg', 'Asset 21.svg',
+            'Asset 22.svg', 'Asset 23.svg', 'Asset 24.svg', 'Asset 25.svg', 'Asset 26.svg',
+            'Asset 27.svg', 'Asset 28.svg', 'Asset 29.svg', 'Asset 30.svg', 'Asset 31.svg', 
+            'Asset 32.svg', 'Asset 33.svg', 'Asset 34.svg'
+        ];
+
+        const board = document.getElementById('puzzle-board');
+        const tray = document.getElementById('table-tray');
+        let activePiece = null;
+        let startX, startY, origX, origY;
+
+        function initGame() {
+            board.innerHTML = '';
+            tray.innerHTML = '';
+
+            assetFiles.forEach((file) => {
+                const filePath = `Asset/${encodeURIComponent(file)}`;
+
+                const piece = document.createElement('div');
+                piece.className = 'puzzle-piece';
+                piece.style.width = `${TILE_SIZE}px`;
+                piece.style.height = `${TILE_SIZE}px`;
+                
+                piece.innerHTML = `<img src="${filePath}">`;
+                piece.dataset.isSnapped = "false";
+
+                piece.addEventListener('touchstart', dragStart, {passive: false});
+                piece.addEventListener('mousedown', dragStart);
+
+                tray.appendChild(piece);
+            });
+        }
+
+        function dragStart(e) {
+            const piece = e.currentTarget;
+            activePiece = piece;
+            piece.style.transition = 'none';
+
+            if (piece.parentElement === tray) {
+                const rect = piece.getBoundingClientRect();
+                piece.style.position = 'fixed';
+                piece.style.left = `${rect.left}px`;
+                piece.style.top = `${rect.top}px`;
+                document.body.appendChild(piece);
+            }
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const rect = piece.getBoundingClientRect();
+            startX = clientX;
+            startY = clientY;
+            origX = rect.left;
+            origY = rect.top;
+
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('touchend', dragEnd);
+            document.addEventListener('mouseup', dragEnd);
+        }
+
+        function dragMove(e) {
+            if (!activePiece) return;
+            if (e.cancelable) e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            activePiece.style.left = `${origX + (clientX - startX)}px`;
+            activePiece.style.top = `${origY + (clientY - startY)}px`;
+        }
+
+        function dragEnd() {
+            if (!activePiece) return;
+
+            const piece = activePiece;
+            activePiece = null;
+
+            document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchend', dragEnd);
+            document.removeEventListener('mouseup', dragEnd);
+
+            const boardRect = board.getBoundingClientRect();
+            const pieceRect = piece.getBoundingClientRect();
+
+            const isOverBoard = (
+                pieceRect.right > boardRect.left &&
+                pieceRect.left < boardRect.right &&
+                pieceRect.bottom > boardRect.top &&
+                pieceRect.top < boardRect.bottom
+            );
+
+            if (!isOverBoard) {
+                tray.appendChild(piece);
+                piece.style.position = 'relative';
+                piece.style.left = '0';
+                piece.style.top = '0';
+                piece.classList.remove('snapped');
+                piece.dataset.isSnapped = "false";
+                return;
+            }
+
+            board.appendChild(piece);
+            piece.style.position = 'absolute';
+            let currentLocalX = pieceRect.left - boardRect.left;
+            let currentLocalY = pieceRect.top - boardRect.top;
+            piece.style.left = `${currentLocalX}px`;
+            piece.style.top = `${currentLocalY}px`;
+
+            const snappedPieces = Array.from(board.querySelectorAll('.puzzle-piece')).filter(p => p !== piece);
+
+            if (snappedPieces.length === 0) {
+                piece.classList.add('snapped');
+                piece.dataset.isSnapped = "true";
+                return;
+            }
+
+            let bestSnap = null;
+            let minDistance = 32; 
+
+            snappedPieces.forEach(fixedPiece => {
+                const fx = parseFloat(fixedPiece.style.left);
+                const fy = parseFloat(fixedPiece.style.top);
+
+                const validPorts = [
+                    { x: fx - (OFFSET_X * 2), y: fy }, 
+                    { x: fx + (OFFSET_X * 2), y: fy }, 
+                    { x: fx - OFFSET_X, y: fy - OFFSET_Y }, 
+                    { x: fx + OFFSET_X, y: fy - OFFSET_Y }, 
+                    { x: fx - OFFSET_X, y: fy + OFFSET_Y }, 
+                    { x: fx + OFFSET_X, y: fy + OFFSET_Y }
+                ];
+
+                validPorts.forEach(port => {
+                    const dist = Math.sqrt(Math.pow(currentLocalX - port.x, 2) + Math.pow(currentLocalY - port.y, 2));
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        bestSnap = port;
+                    }
+                });
+            });
+
+            if (bestSnap) {
+                piece.style.left = `${bestSnap.x}px`;
+                piece.style.top = `${bestSnap.y}px`;
+                piece.classList.add('snapped');
+                piece.dataset.isSnapped = "true";
+                playSnapSound();
+            } else {
+                piece.classList.remove('snapped');
+                piece.dataset.isSnapped = "false";
+            }
+        }
+
+        function captureSolution() {
+            const placedPieces = Array.from(board.querySelectorAll('.puzzle-piece'));
+            
+            if (placedPieces.length === 0) {
+                alert("Place some tiles on the canvas before saving!");
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const exportScale = 3; 
+            const boardRect = board.getBoundingClientRect();
+            
+            canvas.width = boardRect.width * exportScale;
+            canvas.height = boardRect.height * exportScale;
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            placedPieces.forEach(piece => {
+                const imgElement = piece.querySelector('img');
+                const lx = parseFloat(piece.style.left);
+                const ly = parseFloat(piece.style.top);
+
+                if (imgElement && imgElement.complete) {
+                    ctx.drawImage(
+                        imgElement, 
+                        lx * exportScale, 
+                        ly * exportScale, 
+                        TILE_SIZE * exportScale, 
+                        TILE_SIZE * exportScale
+                    );
+                }
+            });
+
+            try {
+                const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                const clientAnchorLink = document.createElement('a');
+                clientAnchorLink.download = 'My-Guess.jpg';
+                clientAnchorLink.href = jpegDataUrl;
+                document.body.appendChild(clientAnchorLink);
+                clientAnchorLink.click();
+                document.body.removeChild(clientAnchorLink);
+            } catch (err) {
+                const dataUrl = canvas.toDataURL('image/png');
+                const win = window.open();
+                win.document.write('<iframe src="' + dataUrl + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
+            }
+        }
+
+        window.onload = initGame;
+    </script>
+</body>
+</html>
