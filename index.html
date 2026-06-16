@@ -219,7 +219,15 @@
             board.innerHTML = '';
             tray.innerHTML = '';
 
-            assetFiles.forEach((file) => {
+            // Fisher-Yates Shuffle Algorithm to completely randomize the tile array
+            const randomizedFiles = [...assetFiles]; // Create a copy so we don't mutate the original array
+            for (let i = randomizedFiles.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [randomizedFiles[i], randomizedFiles[j]] = [randomizedFiles[j], randomizedFiles[i]];
+            }
+
+            // Generate the pieces in their new randomized order
+            randomizedFiles.forEach((file) => {
                 const filePath = `Asset/${encodeURIComponent(file)}`;
 
                 const piece = document.createElement('div');
@@ -235,6 +243,9 @@
 
                 tray.appendChild(piece);
             });
+        
+
+            
         }
 
         function dragStart(e) {
